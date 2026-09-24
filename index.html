@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wizard Typing Game - Arcane Defense</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d0d13;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            width: 900px;
+            height: 600px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #161622;
+            display: block;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 18, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        h1 {
+            font-size: 42px;
+            margin: 0 0 10px 0;
+            color: #f1c40f;
+            text-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
+            letter-spacing: 2px;
+        }
+        p {
+            font-size: 16px;
+            color: #aaa;
+            margin: 5px 0;
+        }
+        .stats-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px 30px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn {
+            background: #e74c3c;
+            color: #fff;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-family: monospace;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            margin-top: 15px;
+        }
+        .btn:hover {
+            background: #c0392b;
+            transform: scale(1.05);
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="900" height="600"></canvas>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="overlay">
+            <h1>DON'T DIE: ARCANE CHANT</h1>
+            <p>Type spell chants to destroy approaching monsters.</p>
+            <p>Match spell elements to enemy types to survive!</p>
+            <div class="stats-box">
+                <p>HIGH SCORE: <span id="startHighScore" style="color: #f1c40f; font-weight: bold;">0</span></p>
+            </div>
+            <button class="btn" onclick="startGame()">START GAME</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="overlay hidden">
+            <h1 style="color: #e74c3c; text-shadow: 0 0 10px rgba(231, 76, 60, 0.5);">YOU DIED</h1>
+            <div class="stats-box">
+                <p>FINAL SCORE: <span id="finalScore" style="color: #2ecc71; font-weight: bold;">0</span></p>
+                <p>SURVIVED TIME: <span id="finalTime" style="color: #3498db;">0s</span></p>
+                <p>HIGH SCORE: <span id="endHighScore" style="color: #f1c40f; font-weight: bold;">0</span></p>
+            </div>
+            <button class="btn" onclick="startGame()">PLAY AGAIN</button>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game State Variables
+let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER'
+let score = 0;
+let highScore = localStorage.getItem('wizard_highscore') || 0;
+let startTime = 0;
+let elapsedTime = 0;
+
+let spawnTimer = 0;
+let baseSpawnInterval = 180; // Starts at ~3 seconds
+let activeEnemies = [];
+let currentTarget = null;
+
+const wizard = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    radius: 24,
+    color: '#3498db'
+};
+
+// Word Bank organized by difficulty/length
+const spellData = {
+    fire: { 
+        color: '#e74c3c', 
+        easy: ["burn", "fire", "ash", "heat"], 
+        hard: ["fireball", "ignite", "inferno", "scorch", "pyroblast"] 
+    },
+    ice: { 
+        color: '#3498db', 
+        easy: ["ice", "cold", "snow", "chill"], 
+        hard: ["freeze", "glacier", "blizzard", "frostbite", "avalanche"] 
+    },
+    lightning: { 
+        color: '#f1c40f', 
+        easy: ["zap", "bolt", "jolt", "volt"], 
+        hard: ["thunder", "spark", "overload", "electrocute", "lightning"] 
+    },
+    holy: { 
+        color: '#e67e22', 
+        easy: ["ray", "dawn", "glow", "pure"], 
+        hard: ["purify", "exorcise", "smite", "sanctuary", "radiance"] 
+    }
+};
+
+const enemyTypes = Object.keys(spellData);
+
+class Enemy {
+    constructor(difficultyFactor) {
+        // Pick spawn point along edges
+        const side = Math.floor(Math.random() * 4);
+        if (side === 0) { this.x = Math.random() * canvas.width; this.y = -20; }
+        else if (side === 1) { this.x = canvas.width + 20; this.y = Math.random() * canvas.height; }
+        else if (side === 2) { this.x = Math.random() * canvas.width; this.y = canvas.height + 20; }
+        else { this.x = -20; this.y = Math.random() * canvas.height; }
+
+        this.type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+        
+        // As game time increases, hard words spawn more frequently
+        const useHardWords = Math.random() < Math.min(difficultyFactor * 0.15, 0.85);
+        const pool = useHardWords ? spellData[this.type].hard : spellData[this.type].easy;
+        
+        this.word = pool[Math.floor(Math.random() * pool.length)];
+        this.typeIndex = 0;
+        
+        // Speed scales up gradually with difficulty
+        this.speed = (0.5 + Math.random() * 0.3) + (difficultyFactor * 0.08);
+        this.radius = 18;
+        this.color = spellData[this.type].color;
+    }
+
+    update() {
+        const angle = Math.atan2(wizard.y - this.y, wizard.x - this.x);
+        this.x += Math.cos(angle) * this.speed;
+        this.y += Math.sin(angle) * this.speed;
+
+        const dist = Math.hypot(wizard.x - this.x, wizard.y - this.y);
+        if (dist < wizard.radius + this.radius) {
+            triggerGameOver();
+        }
+    }
+
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.lineWidth = (currentTarget === this) ? 3 : 1;
+        ctx.strokeStyle = (currentTarget === this) ? '#ffffff' : '#000000';
+        ctx.stroke();
+
+        ctx.font = 'bold 16px monospace';
+        const typedText = this.word.substring(0, this.typeIndex);
+        const remainingText = this.word.substring(this.typeIndex);
+
+        const textY = this.y - 25;
+        const typedWidth = ctx.measureText(typedText).width;
+        const totalWidth = ctx.measureText(this.word).width;
+        const startX = this.x - (totalWidth / 2);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#2ecc71';
+        ctx.fillText(typedText, startX, textY);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(remainingText, startX + typedWidth, textY);
+    }
+
+    checkNextChar(char) {
+        if (this.word[this.typeIndex] === char) {
+            this.typeIndex++;
+            return true;
+        }
+        return false;
+    }
+
+    isComplete() {
+        return this.typeIndex >= this.word.length;
+    }
+}
+
+// Initial UI Setup
+document.getElementById('startHighScore').innerText = highScore;
+
+function startGame() {
+    gameState = 'PLAYING';
+    score = 0;
+    activeEnemies = [];
+    currentTarget = null;
+    spawnTimer = 0;
+    startTime = Date.now();
+
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.add('hidden');
+
+    requestAnimationFrame(gameLoop);
+}
+
+function triggerGameOver() {
+    gameState = 'GAMEOVER';
+    elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('wizard_highscore', highScore);
+    }
+
+    document.getElementById('finalScore').innerText = score;
+    document.getElementById('finalTime').innerText = elapsedTime + "s";
+    document.getElementById('endHighScore').innerText = highScore;
+    document.getElementById('startHighScore').innerText = highScore;
+
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+
+// Key Input Listener
+window.addEventListener('keydown', (e) => {
+    if (gameState !== 'PLAYING') return;
+
+    const char = e.key.toLowerCase();
+    if (char.length !== 1 || char < 'a' || char > 'z') return;
+
+    if (currentTarget) {
+        if (currentTarget.checkNextChar(char)) {
+            score += 10; // Points per correct letter
+            if (currentTarget.isComplete()) {
+                score += currentTarget.word.length * 25; // Bonus points for completing a word
+                activeEnemies = activeEnemies.filter(e => e !== currentTarget);
+                currentTarget = null;
+            }
+        }
+    } else {
+        let matchingEnemies = activeEnemies.filter(e => e.word.startsWith(char));
+        if (matchingEnemies.length > 0) {
+            matchingEnemies.sort((a, b) => {
+                const distA = Math.hypot(wizard.x - a.x, wizard.y - a.y);
+                const distB = Math.hypot(wizard.x - b.x, wizard.y - b.y);
+                return distA - distB;
+            });
+            currentTarget = matchingEnemies[0];
+            currentTarget.checkNextChar(char);
+            score += 10;
+        }
+    }
+});
+
+// Game Loop
+function gameLoop() {
+    if (gameState !== 'PLAYING') return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Difficulty Factor increases by 1 point every 10 seconds survived
+    const difficultyFactor = (Date.now() - startTime) / 10000;
+
+    // Spawning Logic (Spawn rate speeds up over time, capped at 0.6 seconds minimum)
+    const currentSpawnInterval = Math.max(35, baseSpawnInterval - (difficultyFactor * 12));
+    spawnTimer++;
+    if (spawnTimer >= currentSpawnInterval) {
+        activeEnemies.push(new Enemy(difficultyFactor));
+        spawnTimer = 0;
+    }
+
+    // Update & Draw Enemies
+    activeEnemies.forEach(enemy => {
+        enemy.update();
+        enemy.draw();
+    });
+
+    // Draw Central Wizard
+    ctx.beginPath();
+    ctx.arc(wizard.x, wizard.y, wizard.radius, 0, Math.PI * 2);
+    ctx.fillStyle = wizard.color;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+
+    // Draw In-Game HUD
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`SCORE: ${score}`, 20, 35);
+
+    ctx.fillStyle = '#f1c40f';
+    ctx.fillText(`HIGH: ${highScore}`, 20, 60);
+
+    const currentTime = Math.floor((Date.now() - startTime) / 1000);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillText(`TIME: ${currentTime}s`, canvas.width - 20, 35);
+
+    requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>
