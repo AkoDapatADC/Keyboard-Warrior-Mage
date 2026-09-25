@@ -26,7 +26,12 @@
  * - Enemy.checkNextChar(): checks and records the next typed letter.
  * - Enemy.isComplete(): reports whether the enemy word is finished.
  * - resizeCanvas(): makes the canvas and game world match the browser viewport.
+ * - setStance(): changes the active spellbook and filters the current target.
+ * - canTarget(): checks stance weakness and special combo eligibility.
+ * - phaseGhost(): makes a ghost temporarily untargetable.
+ * - registerDefeat(): applies score, combo, shatter, and AoE defeat rules.
  * - startGame(): resets score and enemies, then starts a new run.
+ * - openInstructions()/closeInstructions(): show or hide the field manual.
  * - initializeAudio(): unlocks the browser audio system after a button click.
  * - startBackgroundMusic(): starts the quiet retro gameplay melody.
  * - pauseBackgroundMusic(): ducks the melody while the game is paused.
@@ -36,6 +41,8 @@
  * - playDefeatSound(): plays the sound matching the counter-spell element.
  * - fireSpellBolt(): creates a visual spell shot for a correct letter.
  * - drawWizard(): renders the mage and turns it toward the current target.
+ * - drawHudPanel()/drawGameHUD(): render the framed score and status panels.
+ * - drawSkillsHUD(): renders the spellbook skill cards along the bottom.
  * - drawSpellProjectile(): draws the counter-spell's pixel projectile shape.
  * - updateAndDrawSpellEffects(): animates and renders active spell shots.
  * - pauseGame(): freezes the run and opens the pause menu.
@@ -46,6 +53,8 @@
  * - gameLoop(): runs one time-adjusted frame of spawning, movement, drawing, and HUD updates.
  *
  * Game states: START -> PLAYING -> PAUSED/COUNTDOWN -> PLAYING or GAMEOVER.
+ * Enemy matchups: brown ogre -> lightning, red pixie -> ice, yellow ghost -> holy,
+ * blue slime -> fire.
  */
 
 const canvas = document.getElementById('gameCanvas');
@@ -70,6 +79,8 @@ let lastFrameTime = 0;
 let activeEnemies = [];
 let currentTarget = null;
 let spellEffects = [];
+let activeStance = 'fire';
+let comboCount = 0;
 
 const wizard = {
     x: canvas.width / 2,
@@ -92,6 +103,15 @@ window.addEventListener('resize', resizeCanvas);
 // Draw the upright mage and mirror it when the target is to the left.
 function drawWizard() {
     const facingLeft = currentTarget && currentTarget.x < wizard.x;
+    const stanceColor = spellData[activeStance].color;
+
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = stanceColor;
+    ctx.beginPath();
+    ctx.arc(wizard.x, wizard.y, wizard.radius + 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     if (mageSprite.complete && mageSprite.naturalWidth > 0) {
         ctx.save();
@@ -111,36 +131,200 @@ function drawWizard() {
     ctx.stroke();
 }
 
-// Word banks and counter-spell matchups organized by enemy element.
-// Blue ice -> fire, red fire -> ice, yellow lightning -> holy, brown holy -> holy.
+// Draw a framed HUD panel with a colored accent line.
+function drawHudPanel(x, y, width, height, accentColor) {
+    ctx.fillStyle = 'rgba(8, 11, 28, 0.88)';
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeStyle = '#4b4f78';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(x, y, width, 3);
+}
+
+// Draw score, time, stance, and combo as game-style top HUD panels.
+function drawGameHUD() {
+    const compact = canvas.width < 640;
+    const panelHeight = compact ? 54 : 64;
+    const margin = compact ? 12 : 18;
+    const scoreWidth = compact ? 126 : 184;
+    const timeWidth = compact ? 116 : 154;
+    const stanceWidth = compact ? 126 : 210;
+    const labelSize = compact ? 9 : 11;
+    const valueSize = compact ? 17 : 23;
+
+    drawHudPanel(margin, margin, scoreWidth, panelHeight, '#2ecc71');
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9ca5c7';
+    ctx.font = `bold ${labelSize}px monospace`;
+    ctx.fillText('SCORE', margin + 12, margin + 19);
+    ctx.fillText(`HIGH ${highScore}`, margin + 12, margin + panelHeight - 9);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${valueSize}px monospace`;
+    ctx.fillText(score, margin + 12, margin + 43);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = `bold ${labelSize}px monospace`;
+    ctx.fillText(`x${comboCount}`, margin + scoreWidth - 12, margin + 19);
+
+    const timeX = canvas.width - margin - timeWidth;
+    drawHudPanel(timeX, margin, timeWidth, panelHeight, '#3498db');
+    const currentTime = Math.floor((Date.now() - startTime) / 1000);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#9ca5c7';
+    ctx.font = `bold ${labelSize}px monospace`;
+    ctx.fillText('SURVIVAL TIME', canvas.width - margin - 12, margin + 19);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${valueSize}px monospace`;
+    ctx.fillText(`${currentTime}s`, canvas.width - margin - 12, margin + 46);
+
+    const stanceX = (canvas.width - stanceWidth) / 2;
+    const stanceColor = spellData[activeStance].color;
+    drawHudPanel(stanceX, margin, stanceWidth, panelHeight, stanceColor);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9ca5c7';
+    ctx.font = `bold ${labelSize}px monospace`;
+    ctx.fillText('ACTIVE SPELLBOOK', canvas.width / 2, margin + 19);
+    ctx.fillStyle = stanceColor;
+    ctx.font = `bold ${compact ? 14 : 18}px monospace`;
+    ctx.fillText(activeStance.toUpperCase(), canvas.width / 2, margin + 45);
+}
+
+// Draw the four stance skills along the bottom of the gameplay HUD.
+function drawSkillsHUD() {
+    const skills = [
+        { key: '1/F', name: 'FIRE', type: 'fire', target: 'BLUE' },
+        { key: '2/I', name: 'ICE', type: 'ice', target: 'RED' },
+        { key: '3/L', name: 'LIGHT', type: 'lightning', target: 'BROWN' },
+        { key: '4/H', name: 'HOLY', type: 'holy', target: 'YELLOW' }
+    ];
+    const barTop = canvas.height - 66;
+    const barLeft = 18;
+    const barWidth = Math.max(180, canvas.width - 150);
+    const cellWidth = barWidth / skills.length;
+    const fontSize = canvas.width < 600 ? 9 : 12;
+
+    ctx.fillStyle = 'rgba(10, 13, 30, 0.86)';
+    ctx.fillRect(barLeft, barTop - 16, barWidth, 54);
+    ctx.fillStyle = '#9ca5c7';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('SPELLBOOK SKILLS', barLeft + 8, barTop - 4);
+
+    skills.forEach((skill, index) => {
+        const cellLeft = barLeft + index * cellWidth;
+        const isActive = activeStance === skill.type;
+        ctx.strokeStyle = isActive ? spellData[skill.type].color : '#4b4f78';
+        ctx.lineWidth = isActive ? 3 : 1;
+        ctx.strokeRect(cellLeft + 2, barTop + 2, cellWidth - 4, 36);
+        ctx.fillStyle = isActive ? spellData[skill.type].color : '#c7c5bd';
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${skill.key} ${skill.name}`, cellLeft + cellWidth / 2, barTop + 17);
+        ctx.fillStyle = isActive ? '#ffffff' : '#7e86a8';
+        ctx.font = `${Math.max(8, fontSize - 2)}px monospace`;
+        ctx.fillText(`VS ${skill.target}`, cellLeft + cellWidth / 2, barTop + 31);
+    });
+}
+
+// Switch the active spellbook and clear targets that no longer match it.
+function setStance(stance) {
+    if (!spellData[stance]) return;
+
+    activeStance = stance;
+    if (currentTarget && !canTarget(currentTarget)) {
+        currentTarget = null;
+    }
+}
+
+// Allow matching weaknesses, plus a frozen slime's lightning shatter setup.
+function canTarget(enemy) {
+    if (!enemy || !enemy.isTargetable()) return false;
+    return enemy.weakness === activeStance || (
+        enemy.archetypeId === 'slime' &&
+        enemy.frozen &&
+        activeStance === 'lightning'
+    );
+}
+
+// Phase a ghost out of targeting range for 1.5 seconds.
+function phaseGhost(enemy) {
+    if (!enemy || enemy.archetypeId !== 'ghost') return;
+    enemy.phaseTimer = 1500;
+    if (currentTarget === enemy) currentTarget = null;
+    comboCount = 0;
+}
+
+// A focus loss phases every ghost while it continues moving.
+function phaseAllGhosts() {
+    activeEnemies.forEach(enemy => phaseGhost(enemy));
+}
+
+window.addEventListener('blur', phaseAllGhosts);
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) phaseAllGhosts();
+});
+
+// Spell colors and word banks organized by spellbook element.
+// Blue enemies -> fire, red enemies -> ice, brown enemies -> lightning, yellow enemies -> holy.
 const spellData = {
     fire: { 
         color: '#e74c3c', 
-        counterSpell: 'ice',
         easy: ["burn", "fire", "ash", "heat"], 
         hard: ["fireball", "ignite", "inferno", "scorch", "pyroblast"] 
     },
     ice: { 
         color: '#3498db', 
-        counterSpell: 'fire',
         easy: ["ice", "cold", "snow", "chill"], 
         hard: ["freeze", "glacier", "blizzard", "frostbite", "avalanche"] 
     },
     lightning: { 
         color: '#f1c40f', 
-        counterSpell: 'holy',
         easy: ["zap", "bolt", "jolt", "volt"], 
         hard: ["thunder", "spark", "overload", "electrocute", "lightning"] 
     },
     holy: { 
         color: '#e67e22', 
-        counterSpell: 'holy',
         easy: ["ray", "dawn", "glow", "pure"], 
         hard: ["purify", "exorcise", "smite", "sanctuary", "radiance"] 
     }
 };
 
 const enemyTypes = Object.keys(spellData);
+const enemyArchetypes = {
+    ogre: {
+        displayName: 'ARMORED OGRE',
+        weakness: 'lightning',
+        spriteType: 'holy',
+        speed: 0.25,
+        easy: ['thunder'],
+        hard: ['thunderbolt', 'overload']
+    },
+    pixie: {
+        displayName: 'SWARM PIXIE',
+        weakness: 'ice',
+        spriteType: 'fire',
+        speed: 1.4,
+        easy: ['ice', 'cold', 'snow'],
+        hard: ['freeze']
+    },
+    ghost: {
+        displayName: 'PHANTOM GHOST',
+        weakness: 'holy',
+        spriteType: 'lightning',
+        speed: 0.75,
+        easy: ['ray', 'dawn', 'glow'],
+        hard: ['purify', 'smite']
+    },
+    slime: {
+        displayName: 'WATER SLIME',
+        weakness: 'fire',
+        spriteType: 'ice',
+        speed: 1.1,
+        easy: ['burn', 'fire', 'ash'],
+        hard: ['fireball', 'ignite']
+    }
+};
 const enemySprites = Object.fromEntries(enemyTypes.map(type => {
     const sprite = new Image();
     sprite.src = `enemy-${type}.svg`;
@@ -159,25 +343,34 @@ class Enemy {
         else if (side === 2) { this.x = Math.random() * canvas.width; this.y = canvas.height + 20; }
         else { this.x = -20; this.y = Math.random() * canvas.height; }
 
-        this.type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-        this.counterSpell = spellData[this.type].counterSpell;
+        const archetypeKeys = Object.keys(enemyArchetypes);
+        this.archetypeId = archetypeKeys[Math.floor(Math.random() * archetypeKeys.length)];
+        const archetype = enemyArchetypes[this.archetypeId];
+        this.type = archetype.spriteType;
+        this.weakness = archetype.weakness;
+        this.counterSpell = archetype.weakness;
+        this.speed = archetype.speed;
+        this.phaseTimer = 0;
+        this.frozen = false;
         
         // The word represents the counter-spell needed to defeat this enemy.
         // As game time increases, hard words spawn more frequently.
         const useHardWords = Math.random() < Math.min(difficultyFactor * 0.15, 0.85);
-        const pool = useHardWords ? spellData[this.counterSpell].hard : spellData[this.counterSpell].easy;
+        const pool = useHardWords ? archetype.hard : archetype.easy;
         
         this.word = pool[Math.floor(Math.random() * pool.length)];
         this.typeIndex = 0;
         
-        // Speed scales up gradually with difficulty
-        this.speed = (0.5 + Math.random() * 0.3) + (difficultyFactor * 0.08);
         this.radius = 18;
         this.color = spellData[this.type].color;
     }
 
     // Move toward the wizard at a frame-rate-independent speed.
     update(frameDelta) {
+        this.phaseTimer = Math.max(0, this.phaseTimer - frameDelta * 16.6667);
+
+        if (this.frozen) return;
+
         const angle = Math.atan2(wizard.y - this.y, wizard.x - this.x);
         this.x += Math.cos(angle) * this.speed * frameDelta;
         this.y += Math.sin(angle) * this.speed * frameDelta;
@@ -192,6 +385,8 @@ class Enemy {
     draw() {
         const sprite = enemySprites[this.type];
         const isTargeted = currentTarget === this;
+        ctx.save();
+        ctx.globalAlpha = this.phaseTimer > 0 ? 0.35 : 1;
 
         if (sprite.complete && sprite.naturalWidth > 0) {
             ctx.drawImage(sprite, this.x - 32, this.y - 32, 64, 64);
@@ -225,6 +420,12 @@ class Enemy {
 
         ctx.fillStyle = '#ffffff';
         ctx.fillText(remainingText, startX + typedWidth, textY);
+        ctx.restore();
+    }
+
+    // Report whether this enemy can currently be targeted.
+    isTargetable() {
+        return this.phaseTimer <= 0;
     }
 
     // Advance this enemy's word when the typed character is correct.
@@ -256,9 +457,12 @@ function startGame() {
     spawnTimer = 0;
     lastFrameTime = 0;
     spellEffects = [];
+    activeStance = 'fire';
+    comboCount = 0;
     startTime = Date.now();
 
     document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('instructionsScreen').classList.add('hidden');
     document.getElementById('gameOverScreen').classList.add('hidden');
     document.getElementById('pauseButton').classList.remove('hidden');
     document.getElementById('pauseScreen').classList.add('hidden');
@@ -266,12 +470,27 @@ function startGame() {
     requestAnimationFrame(gameLoop);
 }
 
+// Replace the opening menu with the instructions hub.
+function openInstructions() {
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('instructionsScreen').classList.remove('hidden');
+}
+
+// Close the instructions hub and return to the opening menu.
+function closeInstructions() {
+    document.getElementById('instructionsScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.remove('hidden');
+}
+
 /*
  * QUICK REFERENCE - WHERE TO MAKE CHANGES
  *
  * Want to change...                  Edit...
  * - Words or spell colors             spellData near the top
- * - Enemy counter-spells              counterSpell in spellData
+ * - Enemy counter-spells              weakness in enemyArchetypes
+ * - Stance switching and target rules  setStance(), canTarget()
+ * - Ghost and slime behaviors          phaseGhost(), Enemy.update()
+ * - Score, combos, and AoE             registerDefeat()
  * - Enemy size or speed               Enemy.constructor()
  * - Collision behavior                Enemy.update()
  * - Enemy appearance                 Enemy.draw()
@@ -286,6 +505,9 @@ function startGame() {
  * - Opening screen artwork            start-bg.svg, index.css
  * - Battleground artwork              map1.svg, index.css
  * - Mage artwork and facing           mage.svg, drawWizard()
+ * - Instructions hub                  index.html, openInstructions(), closeInstructions()
+ * - Bottom stance skills HUD          drawSkillsHUD()
+ * - Score and time HUD styling        drawGameHUD(), drawHudPanel()
  * - Pause, resume, or quit behavior   pauseGame(), resumeGame(), quitToStart()
  * - End-of-game screen or high score  triggerGameOver()
  * - Menus and button text             index.html
@@ -401,15 +623,16 @@ function playTypingSound() {
 
 // Create a short colored bolt from the wizard to the enemy being typed.
 function fireSpellBolt(enemy) {
-    const spellColor = spellData[enemy.counterSpell].color;
+    const spell = spellData[enemy.counterSpell] || spellData.holy;
+    const spellType = spellData[enemy.counterSpell] ? enemy.counterSpell : 'holy';
 
     spellEffects.push({
         enemy,
-        spellType: enemy.counterSpell,
+        spellType,
         startX: wizard.x,
         startY: wizard.y,
         progress: 0,
-        color: spellColor
+        color: spell.color
     });
 }
 
@@ -467,6 +690,29 @@ function updateAndDrawSpellEffects(frameDelta) {
 
         return effect.progress < 1;
     });
+}
+
+// Apply a successful hit's special effects and award its score.
+function registerDefeat(enemy) {
+    const isShatter = enemy.archetypeId === 'slime' && enemy.frozen && activeStance === 'lightning';
+    comboCount++;
+    score += enemy.word.length * 25 * (isShatter ? 2 : 1);
+    score += comboCount * 5;
+    playDefeatSound(enemy.counterSpell);
+
+    const defeatedEnemies = new Set([enemy]);
+    if (enemy.archetypeId === 'pixie' && activeStance === 'ice') {
+        activeEnemies.forEach(otherEnemy => {
+            const distance = Math.hypot(enemy.x - otherEnemy.x, enemy.y - otherEnemy.y);
+            if (otherEnemy !== enemy && otherEnemy.archetypeId === 'pixie' && distance <= 140) {
+                defeatedEnemies.add(otherEnemy);
+                score += 50;
+            }
+        });
+    }
+
+    activeEnemies = activeEnemies.filter(activeEnemy => !defeatedEnemies.has(activeEnemy));
+    currentTarget = null;
 }
 
 // Play a short sound whose tone matches the defeated enemy's element.
@@ -549,10 +795,12 @@ function quitToStart() {
     currentTarget = null;
     score = 0;
     spellEffects = [];
+    comboCount = 0;
 
     document.getElementById('pauseButton').classList.add('hidden');
     document.getElementById('pauseScreen').classList.add('hidden');
     document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('instructionsScreen').classList.add('hidden');
     document.getElementById('startScreen').classList.remove('hidden');
 }
 
@@ -577,6 +825,25 @@ function triggerGameOver() {
 
 // Route Escape to pause/resume, then use typed letters to attack enemies.
 window.addEventListener('keydown', (e) => {
+    if (e.shiftKey) {
+        const stanceKeys = {
+            '1': 'fire',
+            'f': 'fire',
+            '2': 'ice',
+            'i': 'ice',
+            '3': 'lightning',
+            'l': 'lightning',
+            '4': 'holy',
+            'h': 'holy'
+        };
+        const selectedStance = stanceKeys[e.key.toLowerCase()];
+        if (selectedStance) {
+            e.preventDefault();
+            if (gameState === 'PLAYING') setStance(selectedStance);
+            return;
+        }
+    }
+
     if (e.key === 'Escape') {
         if (gameState === 'PLAYING') pauseGame();
         else if (gameState === 'PAUSED') resumeGame();
@@ -588,20 +855,27 @@ window.addEventListener('keydown', (e) => {
     const char = e.key.toLowerCase();
     if (char.length !== 1 || char < 'a' || char > 'z') return;
 
+    if (currentTarget && !canTarget(currentTarget)) {
+        currentTarget = null;
+    }
+
     if (currentTarget) {
         if (currentTarget.checkNextChar(char)) {
             fireSpellBolt(currentTarget);
             playTypingSound();
             score += 10; // Points per correct letter
-            if (currentTarget.isComplete()) {
-                score += currentTarget.word.length * 25; // Bonus points for completing a word
-                playDefeatSound(currentTarget.counterSpell);
-                activeEnemies = activeEnemies.filter(e => e !== currentTarget);
-                currentTarget = null;
+            if (currentTarget.archetypeId === 'slime' && activeStance === 'fire' && currentTarget.typeIndex === 1) {
+                currentTarget.frozen = true;
             }
+            if (currentTarget.isComplete()) {
+                registerDefeat(currentTarget);
+            }
+        } else {
+            comboCount = 0;
+            phaseGhost(currentTarget);
         }
     } else {
-        let matchingEnemies = activeEnemies.filter(e => e.word.startsWith(char));
+        let matchingEnemies = activeEnemies.filter(enemy => canTarget(enemy) && enemy.word.startsWith(char));
         if (matchingEnemies.length > 0) {
             matchingEnemies.sort((a, b) => {
                 const distA = Math.hypot(wizard.x - a.x, wizard.y - a.y);
@@ -613,6 +887,9 @@ window.addEventListener('keydown', (e) => {
             fireSpellBolt(currentTarget);
             playTypingSound();
             score += 10;
+            if (currentTarget.archetypeId === 'slime' && activeStance === 'fire') {
+                currentTarget.frozen = true;
+            }
         }
     }
 });
@@ -649,19 +926,9 @@ function gameLoop(timestamp) {
     // Draw the mage facing the active target.
     drawWizard();
 
-    // Draw In-Game HUD
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 18px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`SCORE: ${score}`, 20, 35);
-
-    ctx.fillStyle = '#f1c40f';
-    ctx.fillText(`HIGH: ${highScore}`, 20, 60);
-
-    const currentTime = Math.floor((Date.now() - startTime) / 1000);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#aaaaaa';
-    ctx.fillText(`TIME: ${currentTime}s`, canvas.width - 20, 35);
+    // Draw the framed score, time, stance, combo, and spellbook HUD.
+    drawGameHUD();
+    drawSkillsHUD();
 
     requestAnimationFrame(gameLoop);
 }

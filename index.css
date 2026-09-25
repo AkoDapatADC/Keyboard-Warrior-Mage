@@ -95,6 +95,7 @@
         .start-title {
             color: #f1c40f;
             line-height: 1.08;
+            margin-bottom: 18px;
             text-shadow: 3px 3px 0 #171a35, 0 0 18px rgba(241, 196, 15, 0.42);
         }
         .start-subtitle {
@@ -108,6 +109,15 @@
             margin: 24px 0 14px;
             text-align: center;
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+        }
+        #startScreen .stats-box {
+            min-width: 300px;
+            padding: 18px 34px;
+            margin: 28px 0 16px;
+        }
+        #startScreen .stats-box p {
+            font-size: 17px;
+            letter-spacing: 1px;
         }
         .btn {
             background: #e74c3c;
@@ -128,6 +138,23 @@
             transform: translateY(-2px);
             box-shadow: 0 7px 0 #8e2d23, 0 12px 24px rgba(0, 0, 0, 0.3);
         }
+        #startScreen > .btn {
+            width: min(360px, 90vw);
+            min-height: 60px;
+            padding: 16px 30px;
+            font-size: 21px;
+            letter-spacing: 1px;
+        }
+        .menu-btn {
+            background: rgba(22, 22, 34, 0.9);
+            font-size: 15px;
+            margin-top: 10px;
+            box-shadow: 0 4px 0 #171a35, 0 8px 18px rgba(0, 0, 0, 0.24);
+        }
+        .menu-btn:hover {
+            background: #3498db;
+            box-shadow: 0 6px 0 #1d5278, 0 10px 20px rgba(0, 0, 0, 0.26);
+        }
         .btn:active {
             transform: translateY(2px);
             box-shadow: 0 3px 0 #8e2d23, 0 6px 14px rgba(0, 0, 0, 0.24);
@@ -147,9 +174,8 @@
         }
         .pause-btn {
             position: absolute;
-            top: 14px;
-            left: 50%;
-            transform: translateX(-50%);
+            bottom: 18px;
+            right: 18px;
             z-index: 5;
             background: rgba(22, 22, 34, 0.9);
             color: #ffffff;
@@ -172,6 +198,48 @@
             margin: 20px 0 5px;
             text-shadow: 0 0 15px rgba(241, 196, 15, 0.6);
         }
+        #instructionsScreen {
+            background: rgba(8, 11, 28, 0.94);
+            z-index: 20;
+        }
+        .instructions-panel {
+            width: min(760px, 100%);
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 28px;
+            background: rgba(20, 25, 56, 0.96);
+            border: 1px solid rgba(241, 196, 15, 0.55);
+            box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45);
+        }
+        .instructions-panel h1 {
+            color: #f1c40f;
+            margin-bottom: 24px;
+        }
+        .instructions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            text-align: left;
+        }
+        .instructions-grid > div {
+            padding: 16px;
+            border-left: 3px solid #3498db;
+            background: rgba(255, 255, 255, 0.045);
+        }
+        .instructions-grid h2 {
+            margin: 0 0 8px;
+            color: #f1c40f;
+            font-size: 15px;
+            letter-spacing: 1px;
+        }
+        .instructions-grid p {
+            margin: 6px 0;
+            text-align: left;
+            font-size: 14px;
+        }
+        .instructions-grid b {
+            color: #ffffff;
+        }
         .hidden { display: none !important; }
         @keyframes screen-in {
             from { opacity: 0; transform: translateY(8px); }
@@ -181,6 +249,9 @@
             .overlay { padding: 20px; }
             h1 { font-size: 32px; }
             .start-kicker { font-size: 10px; letter-spacing: 2px; }
-            .stats-box { padding: 14px 20px; }
+            #startScreen .stats-box { min-width: min(300px, 90vw); padding: 14px 20px; }
+            #startScreen > .btn { min-height: 56px; font-size: 18px; }
+            .instructions-panel { padding: 20px; }
+            .instructions-grid { grid-template-columns: 1fr; gap: 12px; }
         }
     

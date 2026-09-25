@@ -26,13 +26,51 @@
         <!-- Start Screen -->
         <div id="startScreen" class="overlay">
             <p class="start-kicker">ARCANE DEFENSE // TRAINING GROUNDS</p>
-            <h1 class="start-title">DON'T DIE:<br>ARCANE CHANT</h1>
+            <h1 class="start-title">KEYBOARD WARRIOR MAGE:<br>Just Another Typing Game</h1>
             <p class="start-subtitle">Type spell chants to destroy approaching monsters.</p>
             <p class="start-subtitle">Match spell elements to enemy types to survive.</p>
             <div class="stats-box">
                 <p>HIGH SCORE: <span id="startHighScore" style="color: #f1c40f; font-weight: bold;">0</span></p>
             </div>
             <button class="btn" onclick="startGame()">START GAME</button>
+            <button class="btn menu-btn" onclick="openInstructions()">INSTRUCTIONS</button>
+        </div>
+
+        <!-- Instructions Hub -->
+        <div id="instructionsScreen" class="overlay hidden">
+            <div class="instructions-panel">
+                <p class="start-kicker">FIELD MANUAL // QUICK READ</p>
+                <h1>HOW TO PLAY</h1>
+                <div class="instructions-grid">
+                    <div>
+                        <h2>CASTING</h2>
+                        <p>Type the word above an enemy to fire.</p>
+                        <p>Wrong stance? Your letters will not register.</p>
+                    </div>
+                    <div>
+                        <h2>STANCE KEYS</h2>
+                        <p><b>SHIFT + 1 / F</b> Fire</p>
+                        <p><b>SHIFT + 2 / I</b> Ice</p>
+                        <p><b>SHIFT + 3 / L</b> Lightning</p>
+                        <p><b>SHIFT + 4 / H</b> Holy</p>
+                    </div>
+                    <div>
+                        <h2>COUNTERS</h2>
+                        <p>Brown Ogre needs Lightning.</p>
+                        <p>Red Pixie needs Ice.</p>
+                        <p>Ghost needs Holy.</p>
+                        <p>Blue Slime needs Fire.</p>
+                    </div>
+                    <div>
+                        <h2>SPECIALS</h2>
+                        <p>Fire freezes Slime on first hit.</p>
+                        <p>Lightning shatters a frozen Slime.</p>
+                        <p>Ice creates a Pixie chain blast.</p>
+                        <p>Ghosts phase after mistakes.</p>
+                    </div>
+                </div>
+                <button class="btn" onclick="closeInstructions()">BACK TO MENU</button>
+            </div>
         </div>
 
         <!-- Game Over Screen -->
