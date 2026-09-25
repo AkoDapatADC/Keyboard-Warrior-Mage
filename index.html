@@ -11,7 +11,7 @@
 <body>
 
     <div id="game-container">
-        <canvas id="gameCanvas" width="900" height="600"></canvas>
+        <canvas id="gameCanvas"></canvas>
         <button id="pauseButton" class="pause-btn hidden" onclick="pauseGame()" aria-label="Pause game">PAUSE</button>
 
         <!-- Pause Screen -->
@@ -25,9 +25,10 @@
 
         <!-- Start Screen -->
         <div id="startScreen" class="overlay">
-            <h1>DON'T DIE: ARCANE CHANT</h1>
-            <p>Type spell chants to destroy approaching monsters.</p>
-            <p>Match spell elements to enemy types to survive!</p>
+            <p class="start-kicker">ARCANE DEFENSE // TRAINING GROUNDS</p>
+            <h1 class="start-title">DON'T DIE:<br>ARCANE CHANT</h1>
+            <p class="start-subtitle">Type spell chants to destroy approaching monsters.</p>
+            <p class="start-subtitle">Match spell elements to enemy types to survive.</p>
             <div class="stats-box">
                 <p>HIGH SCORE: <span id="startHighScore" style="color: #f1c40f; font-weight: bold;">0</span></p>
             </div>

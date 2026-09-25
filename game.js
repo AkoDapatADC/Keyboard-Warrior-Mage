@@ -21,6 +21,7 @@
  * - Enemy.draw(): draws the enemy, element color, and typed word progress.
  * - Enemy.checkNextChar(): checks and records the next typed letter.
  * - Enemy.isComplete(): reports whether the enemy word is finished.
+ * - resizeCanvas(): makes the game world match the browser viewport.
  * - startGame(): resets score and enemies, then starts a new run.
  * - initializeAudio(): unlocks the browser audio system after a button click.
  * - playTypingSound(): plays a mechanical keyboard click for each correct letter.
@@ -50,6 +51,7 @@ let audioContext = null;
 
 let spawnTimer = 0;
 let baseSpawnInterval = 180; // Starts at ~3 seconds
+let lastFrameTime = 0;
 let activeEnemies = [];
 let currentTarget = null;
 
@@ -59,6 +61,17 @@ const wizard = {
     radius: 24,
     color: '#3498db'
 };
+
+// Match the canvas coordinate system to the full browser viewport.
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    wizard.x = canvas.width / 2;
+    wizard.y = canvas.height / 2;
+}
+
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
 
 // Word Bank organized by difficulty/length
 const spellData = {
@@ -111,11 +124,11 @@ class Enemy {
         this.color = spellData[this.type].color;
     }
 
-    // Move toward the wizard and end the run if this enemy reaches it.
-    update() {
+    // Move toward the wizard at a frame-rate-independent speed.
+    update(frameDelta) {
         const angle = Math.atan2(wizard.y - this.y, wizard.x - this.x);
-        this.x += Math.cos(angle) * this.speed;
-        this.y += Math.sin(angle) * this.speed;
+        this.x += Math.cos(angle) * this.speed * frameDelta;
+        this.y += Math.sin(angle) * this.speed * frameDelta;
 
         const dist = Math.hypot(wizard.x - this.x, wizard.y - this.y);
         if (dist < wizard.radius + this.radius) {
@@ -176,6 +189,7 @@ function startGame() {
     activeEnemies = [];
     currentTarget = null;
     spawnTimer = 0;
+    lastFrameTime = 0;
     startTime = Date.now();
 
     document.getElementById('startScreen').classList.add('hidden');
@@ -392,9 +406,13 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// Run one frame of gameplay, then schedule the next frame.
-function gameLoop() {
+// Run one time-adjusted frame of gameplay, then schedule the next frame.
+function gameLoop(timestamp) {
     if (gameState !== 'PLAYING') return;
+
+    if (lastFrameTime === 0) lastFrameTime = timestamp;
+    const frameDelta = Math.min((timestamp - lastFrameTime) / 16.6667, 2);
+    lastFrameTime = timestamp;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -403,7 +421,7 @@ function gameLoop() {
 
     // Spawning Logic (Spawn rate speeds up over time, capped at 0.6 seconds minimum)
     const currentSpawnInterval = Math.max(35, baseSpawnInterval - (difficultyFactor * 12));
-    spawnTimer++;
+    spawnTimer += frameDelta;
     if (spawnTimer >= currentSpawnInterval) {
         activeEnemies.push(new Enemy(difficultyFactor));
         spawnTimer = 0;
@@ -411,7 +429,7 @@ function gameLoop() {
 
     // Update & Draw Enemies
     activeEnemies.forEach(enemy => {
-        enemy.update();
+        enemy.update(frameDelta);
         enemy.draw();
     });
 

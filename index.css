@@ -1,5 +1,11 @@
 
         * { box-sizing: border-box; }
+        :root {
+            --ink: #f7f2df;
+            --muted-ink: #c7c5bd;
+            --panel: rgba(15, 18, 42, 0.82);
+            --panel-border: rgba(241, 196, 15, 0.45);
+        }
         body {
             margin: 0;
             padding: 0;
@@ -13,6 +19,7 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
+            text-rendering: optimizeLegibility;
         }
         #game-container {
             position: relative;
@@ -50,44 +57,85 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            padding: 32px;
             z-index: 10;
+            animation: screen-in 0.28s ease-out both;
+        }
+        #startScreen {
+            background-color: rgba(10, 12, 32, 0.74);
+            background-image: url('start-bg.svg');
+            background-position: center;
+            background-size: cover;
+            background-blend-mode: multiply;
+        }
+        .start-kicker {
+            color: #f1c40f;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            margin-bottom: 18px;
+        }
+        #gameOverScreen {
+            background: rgba(10, 10, 18, 0.9);
         }
         h1 {
-            font-size: 42px;
+            font-size: 44px;
             margin: 0 0 10px 0;
-            color: #f1c40f;
+            color: var(--ink);
             text-shadow: 0 0 10px rgba(241, 196, 15, 0.5);
             letter-spacing: 2px;
+            text-align: center;
         }
         p {
             font-size: 16px;
-            color: #aaa;
+            color: var(--muted-ink);
             margin: 5px 0;
+            text-align: center;
+        }
+        .start-title {
+            color: #f1c40f;
+            line-height: 1.08;
+            text-shadow: 3px 3px 0 #171a35, 0 0 18px rgba(241, 196, 15, 0.42);
+        }
+        .start-subtitle {
+            max-width: 520px;
         }
         .stats-box {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 15px 30px;
-            border-radius: 8px;
-            margin: 20px 0;
+            background: var(--panel);
+            padding: 16px 30px;
+            border: 1px solid var(--panel-border);
+            border-radius: 4px;
+            margin: 24px 0 14px;
             text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
         }
         .btn {
             background: #e74c3c;
             color: #fff;
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 0.18);
             padding: 12px 30px;
             font-size: 18px;
             font-family: monospace;
             font-weight: bold;
             cursor: pointer;
-            border-radius: 4px;
-            transition: all 0.2s ease;
+            border-radius: 3px;
+            transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
             margin-top: 15px;
+            box-shadow: 0 5px 0 #8e2d23, 0 9px 22px rgba(0, 0, 0, 0.28);
         }
         .btn:hover {
             background: #c0392b;
-            transform: scale(1.05);
+            transform: translateY(-2px);
+            box-shadow: 0 7px 0 #8e2d23, 0 12px 24px rgba(0, 0, 0, 0.3);
+        }
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 3px 0 #8e2d23, 0 6px 14px rgba(0, 0, 0, 0.24);
+        }
+        .btn:focus-visible,
+        .pause-btn:focus-visible {
+            outline: 2px solid #f1c40f;
+            outline-offset: 4px;
         }
         .quit-btn {
             background: #555;
@@ -125,4 +173,14 @@
             text-shadow: 0 0 15px rgba(241, 196, 15, 0.6);
         }
         .hidden { display: none !important; }
+        @keyframes screen-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 600px) {
+            .overlay { padding: 20px; }
+            h1 { font-size: 32px; }
+            .start-kicker { font-size: 10px; letter-spacing: 2px; }
+            .stats-box { padding: 14px 20px; }
+        }
     
