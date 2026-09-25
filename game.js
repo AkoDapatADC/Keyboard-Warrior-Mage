@@ -23,6 +23,7 @@
  * - Enemy.isComplete(): reports whether the enemy word is finished.
  * - startGame(): resets score and enemies, then starts a new run.
  * - initializeAudio(): unlocks the browser audio system after a button click.
+ * - playTypingSound(): plays a mechanical keyboard click for each correct letter.
  * - playDefeatSound(): plays the sound matching fire, ice, lightning, or holy.
  * - pauseGame(): freezes the run and opens the pause menu.
  * - resumeGame(): counts down from three, then continues the paused run.
@@ -194,7 +195,8 @@ function startGame() {
  * - Collision behavior                Enemy.update()
  * - Enemy appearance                 Enemy.draw()
  * - Points for typing or defeating    keyboard handler
- * - Sound style per element           playDefeatSound()
+ * - Typing key sound                 playTypingSound()
+ * - Defeat sound style per element    playDefeatSound()
  * - Spawn rate or difficulty          gameLoop()
  * - Pause, resume, or quit behavior   pauseGame(), resumeGame(), quitToStart()
  * - End-of-game screen or high score  triggerGameOver()
@@ -216,6 +218,37 @@ function initializeAudio() {
     if (audioContext.state === 'suspended') {
         audioContext.resume();
     }
+}
+
+// Play a short mechanical keyboard click for a correctly typed letter.
+function playTypingSound() {
+    if (!audioContext) return;
+
+    const now = audioContext.currentTime;
+    const duration = 0.045;
+    const sampleRate = audioContext.sampleRate;
+    const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+    const samples = buffer.getChannelData(0);
+    const source = audioContext.createBufferSource();
+    const filter = audioContext.createBiquadFilter();
+    const gain = audioContext.createGain();
+
+    for (let index = 0; index < samples.length; index++) {
+        samples[index] = (Math.random() * 2 - 1) * Math.exp(-index / (sampleRate * 0.012));
+    }
+
+    source.buffer = buffer;
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(1200, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioContext.destination);
+    source.start(now);
+    source.stop(now + duration);
 }
 
 // Play a short sound whose tone matches the defeated enemy's element.
@@ -334,6 +367,7 @@ window.addEventListener('keydown', (e) => {
 
     if (currentTarget) {
         if (currentTarget.checkNextChar(char)) {
+            playTypingSound();
             score += 10; // Points per correct letter
             if (currentTarget.isComplete()) {
                 score += currentTarget.word.length * 25; // Bonus points for completing a word
@@ -352,6 +386,7 @@ window.addEventListener('keydown', (e) => {
             });
             currentTarget = matchingEnemies[0];
             currentTarget.checkNextChar(char);
+            playTypingSound();
             score += 10;
         }
     }
