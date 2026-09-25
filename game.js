@@ -7,6 +7,8 @@
  * - index.css: layout, pixel backgrounds, colors, buttons, overlays, and responsive styling.
  * - start-bg.svg: pixel-art title scene shown on the opening menu.
  * - map1.svg: replaceable pixel-art battleground shown during play.
+ * - enemy-*.svg: pixel-art sprites for fire, ice, lightning, and holy enemies.
+ * - mage.svg: pixel-art wizard sprite used for the player character.
  * - game.js: enemies, typing, score, pause/resume, sound, and the game loop.
  *
  * Main gameplay flow:
@@ -31,8 +33,10 @@
  * - resumeBackgroundMusic(): restores the melody after the pause countdown.
  * - stopBackgroundMusic(): ends the melody on game over or quit.
  * - playTypingSound(): plays a mechanical keyboard click for each correct letter.
- * - playDefeatSound(): plays the sound matching fire, ice, lightning, or holy.
+ * - playDefeatSound(): plays the sound matching the counter-spell element.
  * - fireSpellBolt(): creates a visual spell shot for a correct letter.
+ * - drawWizard(): renders the mage and turns it toward the current target.
+ * - drawSpellProjectile(): draws the counter-spell's pixel projectile shape.
  * - updateAndDrawSpellEffects(): animates and renders active spell shots.
  * - pauseGame(): freezes the run and opens the pause menu.
  * - resumeGame(): counts down from three, then continues the paused run.
@@ -85,31 +89,65 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
-// Word Bank organized by difficulty/length
+// Draw the upright mage and mirror it when the target is to the left.
+function drawWizard() {
+    const facingLeft = currentTarget && currentTarget.x < wizard.x;
+
+    if (mageSprite.complete && mageSprite.naturalWidth > 0) {
+        ctx.save();
+        ctx.translate(wizard.x, wizard.y);
+        ctx.scale(facingLeft ? -1 : 1, 1);
+        ctx.drawImage(mageSprite, -32, -40, 64, 80);
+        ctx.restore();
+        return;
+    }
+
+    ctx.beginPath();
+    ctx.arc(wizard.x, wizard.y, wizard.radius, 0, Math.PI * 2);
+    ctx.fillStyle = wizard.color;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+}
+
+// Word banks and counter-spell matchups organized by enemy element.
+// Blue ice -> fire, red fire -> ice, yellow lightning -> holy, brown holy -> holy.
 const spellData = {
     fire: { 
         color: '#e74c3c', 
+        counterSpell: 'ice',
         easy: ["burn", "fire", "ash", "heat"], 
         hard: ["fireball", "ignite", "inferno", "scorch", "pyroblast"] 
     },
     ice: { 
         color: '#3498db', 
+        counterSpell: 'fire',
         easy: ["ice", "cold", "snow", "chill"], 
         hard: ["freeze", "glacier", "blizzard", "frostbite", "avalanche"] 
     },
     lightning: { 
         color: '#f1c40f', 
+        counterSpell: 'holy',
         easy: ["zap", "bolt", "jolt", "volt"], 
         hard: ["thunder", "spark", "overload", "electrocute", "lightning"] 
     },
     holy: { 
         color: '#e67e22', 
+        counterSpell: 'holy',
         easy: ["ray", "dawn", "glow", "pure"], 
         hard: ["purify", "exorcise", "smite", "sanctuary", "radiance"] 
     }
 };
 
 const enemyTypes = Object.keys(spellData);
+const enemySprites = Object.fromEntries(enemyTypes.map(type => {
+    const sprite = new Image();
+    sprite.src = `enemy-${type}.svg`;
+    return [type, sprite];
+}));
+const mageSprite = new Image();
+mageSprite.src = 'mage.svg';
 
 class Enemy {
     // Create one enemy with a position, element, word, and difficulty-scaled speed.
@@ -122,10 +160,12 @@ class Enemy {
         else { this.x = -20; this.y = Math.random() * canvas.height; }
 
         this.type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+        this.counterSpell = spellData[this.type].counterSpell;
         
-        // As game time increases, hard words spawn more frequently
+        // The word represents the counter-spell needed to defeat this enemy.
+        // As game time increases, hard words spawn more frequently.
         const useHardWords = Math.random() < Math.min(difficultyFactor * 0.15, 0.85);
-        const pool = useHardWords ? spellData[this.type].hard : spellData[this.type].easy;
+        const pool = useHardWords ? spellData[this.counterSpell].hard : spellData[this.counterSpell].easy;
         
         this.word = pool[Math.floor(Math.random() * pool.length)];
         this.typeIndex = 0;
@@ -150,13 +190,25 @@ class Enemy {
 
     // Draw the enemy, its word, and the portion of the word already typed.
     draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.lineWidth = (currentTarget === this) ? 3 : 1;
-        ctx.strokeStyle = (currentTarget === this) ? '#ffffff' : '#000000';
-        ctx.stroke();
+        const sprite = enemySprites[this.type];
+        const isTargeted = currentTarget === this;
+
+        if (sprite.complete && sprite.naturalWidth > 0) {
+            ctx.drawImage(sprite, this.x - 32, this.y - 32, 64, 64);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 2, 0, Math.PI * 2);
+            ctx.lineWidth = isTargeted ? 3 : 1;
+            ctx.strokeStyle = isTargeted ? '#ffffff' : '#000000';
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.lineWidth = isTargeted ? 3 : 1;
+            ctx.strokeStyle = isTargeted ? '#ffffff' : '#000000';
+            ctx.stroke();
+        }
 
         ctx.font = 'bold 16px monospace';
         const typedText = this.word.substring(0, this.typeIndex);
@@ -219,6 +271,7 @@ function startGame() {
  *
  * Want to change...                  Edit...
  * - Words or spell colors             spellData near the top
+ * - Enemy counter-spells              counterSpell in spellData
  * - Enemy size or speed               Enemy.constructor()
  * - Collision behavior                Enemy.update()
  * - Enemy appearance                 Enemy.draw()
@@ -226,11 +279,13 @@ function startGame() {
  * - Typing key sound                 playTypingSound()
  * - Background music                 startBackgroundMusic(), playMusicNote()
  * - Spell shot appearance             fireSpellBolt(), updateAndDrawSpellEffects()
+ * - Spell projectile shapes           drawSpellProjectile()
  * - Defeat sound style per element    playDefeatSound()
  * - Spawn rate or difficulty          gameLoop()
  * - Full-screen game area             resizeCanvas(), index.css
  * - Opening screen artwork            start-bg.svg, index.css
  * - Battleground artwork              map1.svg, index.css
+ * - Mage artwork and facing           mage.svg, drawWizard()
  * - Pause, resume, or quit behavior   pauseGame(), resumeGame(), quitToStart()
  * - End-of-game screen or high score  triggerGameOver()
  * - Menus and button text             index.html
@@ -346,13 +401,47 @@ function playTypingSound() {
 
 // Create a short colored bolt from the wizard to the enemy being typed.
 function fireSpellBolt(enemy) {
+    const spellColor = spellData[enemy.counterSpell].color;
+
     spellEffects.push({
         enemy,
+        spellType: enemy.counterSpell,
         startX: wizard.x,
         startY: wizard.y,
         progress: 0,
-        color: enemy.color
+        color: spellColor
     });
+}
+
+// Draw a recognizable pixel-style projectile for the selected counter-spell.
+function drawSpellProjectile(type, x, y, color) {
+    ctx.fillStyle = color;
+
+    if (type === 'fire') {
+        ctx.fillRect(x - 5, y - 8, 10, 16);
+        ctx.fillRect(x - 8, y - 3, 16, 7);
+        ctx.fillStyle = '#fff2c2';
+        ctx.fillRect(x - 2, y - 4, 4, 8);
+    } else if (type === 'ice') {
+        ctx.beginPath();
+        ctx.moveTo(x, y - 9);
+        ctx.lineTo(x + 9, y);
+        ctx.lineTo(x, y + 9);
+        ctx.lineTo(x - 9, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x - 2, y - 5, 4, 10);
+    } else if (type === 'lightning') {
+        ctx.fillRect(x - 3, y - 10, 7, 9);
+        ctx.fillRect(x - 8, y - 2, 10, 6);
+        ctx.fillRect(x - 3, y + 2, 7, 10);
+    } else {
+        ctx.fillRect(x - 3, y - 10, 6, 20);
+        ctx.fillRect(x - 10, y - 3, 20, 6);
+        ctx.fillStyle = '#fff7b2';
+        ctx.fillRect(x - 2, y - 5, 4, 10);
+    }
 }
 
 // Move each spell bolt toward its target and remove it after it lands.
@@ -373,8 +462,7 @@ function updateAndDrawSpellEffects(frameDelta) {
         ctx.moveTo(effect.startX, effect.startY);
         ctx.lineTo(boltX, boltY);
         ctx.stroke();
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(boltX - 4, boltY - 4, 8, 8);
+        drawSpellProjectile(effect.spellType, boltX, boltY, effect.color);
         ctx.restore();
 
         return effect.progress < 1;
@@ -507,7 +595,7 @@ window.addEventListener('keydown', (e) => {
             score += 10; // Points per correct letter
             if (currentTarget.isComplete()) {
                 score += currentTarget.word.length * 25; // Bonus points for completing a word
-                playDefeatSound(currentTarget.type);
+                playDefeatSound(currentTarget.counterSpell);
                 activeEnemies = activeEnemies.filter(e => e !== currentTarget);
                 currentTarget = null;
             }
@@ -558,14 +646,8 @@ function gameLoop(timestamp) {
 
     updateAndDrawSpellEffects(frameDelta);
 
-    // Draw Central Wizard
-    ctx.beginPath();
-    ctx.arc(wizard.x, wizard.y, wizard.radius, 0, Math.PI * 2);
-    ctx.fillStyle = wizard.color;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#fff';
-    ctx.stroke();
+    // Draw the mage facing the active target.
+    drawWizard();
 
     // Draw In-Game HUD
     ctx.fillStyle = '#ffffff';
