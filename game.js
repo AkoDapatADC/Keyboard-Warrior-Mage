@@ -719,30 +719,34 @@ function registerDefeat(enemy) {
 function playDefeatSound(type) {
     if (!audioContext) return;
 
-    const soundSettings = {
-        fire: { waveform: 'sawtooth', startFrequency: 220, endFrequency: 70, duration: 0.2 },
-        ice: { waveform: 'sine', startFrequency: 660, endFrequency: 990, duration: 0.3 },
-        lightning: { waveform: 'square', startFrequency: 1200, endFrequency: 160, duration: 0.14 },
-        holy: { waveform: 'triangle', startFrequency: 440, endFrequency: 880, duration: 0.35 }
-    }[type];
+    try {
+        const soundSettings = {
+            fire: { waveform: 'sawtooth', startFrequency: 220, endFrequency: 70, duration: 0.2 },
+            ice: { waveform: 'sine', startFrequency: 660, endFrequency: 990, duration: 0.3 },
+            lightning: { waveform: 'square', startFrequency: 1200, endFrequency: 160, duration: 0.14 },
+            holy: { waveform: 'triangle', startFrequency: 440, endFrequency: 880, duration: 0.35 }
+        }[type];
 
-    if (!soundSettings) return;
+        if (!soundSettings) return;
 
-    const now = audioContext.currentTime;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
+        const now = audioContext.currentTime;
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
 
-    oscillator.type = soundSettings.waveform;
-    oscillator.frequency.setValueAtTime(soundSettings.startFrequency, now);
-    oscillator.frequency.exponentialRampToValueAtTime(soundSettings.endFrequency, now + soundSettings.duration);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + soundSettings.duration);
+        oscillator.type = soundSettings.waveform;
+        oscillator.frequency.setValueAtTime(soundSettings.startFrequency, now);
+        oscillator.frequency.exponentialRampToValueAtTime(soundSettings.endFrequency, now + soundSettings.duration);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + soundSettings.duration);
 
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(now);
-    oscillator.stop(now + soundSettings.duration);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now);
+        oscillator.stop(now + soundSettings.duration);
+    } catch (error) {
+        console.warn('Defeat sound unavailable:', error);
+    }
 }
 
 // Freeze the game and show the pause menu without destroying the current run.
