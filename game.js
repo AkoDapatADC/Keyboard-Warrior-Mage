@@ -75,6 +75,7 @@ let musicStep = 0;
 
 let spawnTimer = 0;
 let baseSpawnInterval = 180; // Starts at ~3 seconds
+const enemyWarmupSeconds = 30;
 let lastFrameTime = 0;
 let activeEnemies = [];
 let currentTarget = null;
@@ -349,7 +350,9 @@ class Enemy {
         this.type = archetype.spriteType;
         this.weakness = archetype.weakness;
         this.counterSpell = archetype.weakness;
-        this.speed = archetype.speed;
+        const warmupProgress = Math.min((difficultyFactor * 10) / enemyWarmupSeconds, 1);
+        // Start gently, then reach each archetype's full speed after 30 seconds.
+        this.speed = archetype.speed * (0.45 + warmupProgress * 0.55);
         this.phaseTimer = 0;
         this.frozen = false;
         
