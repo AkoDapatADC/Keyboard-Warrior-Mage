@@ -1,4 +1,39 @@
 
+/*
+ * KEYBOARD WARRIOR MAGE - CODE MAP
+ *
+ * This file runs the game. The other files have simple jobs:
+ * - index.html: canvas, menus, buttons, and screen text.
+ * - index.css: layout, colors, buttons, overlays, and responsive styling.
+ * - game.js: enemies, typing, score, pause/resume, sound, and the game loop.
+ *
+ * Main gameplay flow:
+ * 1. startGame() resets the run and starts the animation loop.
+ * 2. gameLoop() spawns, moves, and draws enemies every frame.
+ * 3. The keyboard handler matches typed letters to an enemy word.
+ * 4. Completing a word awards points, plays its element sound, and removes it.
+ * 5. Reaching the wizard triggers game over. Pause/resume and quit are handled
+ *    separately so the active run can be stopped without losing its state.
+ *
+ * Function guide:
+ * - Enemy.constructor(): creates an enemy and chooses its word and element.
+ * - Enemy.update(): moves an enemy toward the wizard and checks for collision.
+ * - Enemy.draw(): draws the enemy, element color, and typed word progress.
+ * - Enemy.checkNextChar(): checks and records the next typed letter.
+ * - Enemy.isComplete(): reports whether the enemy word is finished.
+ * - startGame(): resets score and enemies, then starts a new run.
+ * - initializeAudio(): unlocks the browser audio system after a button click.
+ * - playDefeatSound(): plays the sound matching fire, ice, lightning, or holy.
+ * - pauseGame(): freezes the run and opens the pause menu.
+ * - resumeGame(): counts down from three, then continues the paused run.
+ * - quitToStart(): clears the run and returns to the opening screen.
+ * - triggerGameOver(): saves high score data and opens the results screen.
+ * - keyboard handler: pauses/resumes with Escape and types spell letters.
+ * - gameLoop(): runs one frame of spawning, movement, drawing, and HUD updates.
+ *
+ * Game states: START -> PLAYING -> PAUSED/COUNTDOWN -> PLAYING or GAMEOVER.
+ */
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -51,6 +86,7 @@ const spellData = {
 const enemyTypes = Object.keys(spellData);
 
 class Enemy {
+    // Create one enemy with a position, element, word, and difficulty-scaled speed.
     constructor(difficultyFactor) {
         // Pick spawn point along edges
         const side = Math.floor(Math.random() * 4);
@@ -74,6 +110,7 @@ class Enemy {
         this.color = spellData[this.type].color;
     }
 
+    // Move toward the wizard and end the run if this enemy reaches it.
     update() {
         const angle = Math.atan2(wizard.y - this.y, wizard.x - this.x);
         this.x += Math.cos(angle) * this.speed;
@@ -85,6 +122,7 @@ class Enemy {
         }
     }
 
+    // Draw the enemy, its word, and the portion of the word already typed.
     draw() {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -111,6 +149,7 @@ class Enemy {
         ctx.fillText(remainingText, startX + typedWidth, textY);
     }
 
+    // Advance this enemy's word when the typed character is correct.
     checkNextChar(char) {
         if (this.word[this.typeIndex] === char) {
             this.typeIndex++;
@@ -119,6 +158,7 @@ class Enemy {
         return false;
     }
 
+    // Report whether the player has typed the enemy's full word.
     isComplete() {
         return this.typeIndex >= this.word.length;
     }
@@ -127,6 +167,7 @@ class Enemy {
 // Initial UI Setup
 document.getElementById('startHighScore').innerText = highScore;
 
+// Reset the run, hide the menus, and begin the animation loop.
 function startGame() {
     initializeAudio();
     gameState = 'PLAYING';
@@ -144,6 +185,27 @@ function startGame() {
     requestAnimationFrame(gameLoop);
 }
 
+/*
+ * QUICK REFERENCE - WHERE TO MAKE CHANGES
+ *
+ * Want to change...                  Edit...
+ * - Words or spell colors             spellData near the top
+ * - Enemy size or speed               Enemy.constructor()
+ * - Collision behavior                Enemy.update()
+ * - Enemy appearance                 Enemy.draw()
+ * - Points for typing or defeating    keyboard handler
+ * - Sound style per element           playDefeatSound()
+ * - Spawn rate or difficulty          gameLoop()
+ * - Pause, resume, or quit behavior   pauseGame(), resumeGame(), quitToStart()
+ * - End-of-game screen or high score  triggerGameOver()
+ * - Menus and button text             index.html
+ * - Layout and visual styling         index.css
+ *
+ * Fast mental model:
+ * data -> Enemy -> keyboard input -> score/sound -> gameLoop -> canvas.
+ */
+
+// Create or resume the browser audio system after a user interaction.
 function initializeAudio() {
     if (!audioContext) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -156,6 +218,7 @@ function initializeAudio() {
     }
 }
 
+// Play a short sound whose tone matches the defeated enemy's element.
 function playDefeatSound(type) {
     if (!audioContext) return;
 
@@ -185,6 +248,7 @@ function playDefeatSound(type) {
     oscillator.stop(now + soundSettings.duration);
 }
 
+// Freeze the game and show the pause menu without destroying the current run.
 function pauseGame() {
     if (gameState !== 'PLAYING') return;
 
@@ -194,6 +258,7 @@ function pauseGame() {
     document.getElementById('pauseScreen').classList.remove('hidden');
 }
 
+// Show the three-second countdown, then continue the frozen run.
 function resumeGame() {
     if (gameState !== 'PAUSED') return;
 
@@ -218,6 +283,7 @@ function resumeGame() {
     }, 1000);
 }
 
+// Discard the current run and return to the opening screen.
 function quitToStart() {
     if (countdownTimer) {
         clearInterval(countdownTimer);
@@ -235,6 +301,7 @@ function quitToStart() {
     document.getElementById('startScreen').classList.remove('hidden');
 }
 
+// Stop the run, save a new high score if needed, and show the results screen.
 function triggerGameOver() {
     gameState = 'GAMEOVER';
     elapsedTime = Math.floor((Date.now() - startTime) / 1000);
@@ -252,7 +319,7 @@ function triggerGameOver() {
     document.getElementById('gameOverScreen').classList.remove('hidden');
 }
 
-// Key Input Listener
+// Route Escape to pause/resume, then use typed letters to attack enemies.
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         if (gameState === 'PLAYING') pauseGame();
@@ -290,7 +357,7 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// Game Loop
+// Run one frame of gameplay, then schedule the next frame.
 function gameLoop() {
     if (gameState !== 'PLAYING') return;
 
