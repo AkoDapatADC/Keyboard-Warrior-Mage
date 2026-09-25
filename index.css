@@ -37,7 +37,7 @@
             display: block;
         }
         #gameCanvas {
-            --battlefield-background: url('map1.svg');
+            --battlefield-background: url('map1.png');
             width: 100%;
             height: 100%;
             background-image: var(--battlefield-background);

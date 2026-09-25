@@ -3,13 +3,15 @@
  * KEYBOARD WARRIOR MAGE - CODE MAP
  *
  * This file runs the game. The other files have simple jobs:
- * - index.html: canvas, menus, buttons, and screen text.
- * - index.css: layout, colors, buttons, overlays, and responsive styling.
+ * - index.html: viewport canvas, menus, buttons, and screen text.
+ * - index.css: layout, pixel backgrounds, colors, buttons, overlays, and responsive styling.
+ * - start-bg.svg: pixel-art title scene shown on the opening menu.
+ * - map1.svg: replaceable pixel-art battleground shown during play.
  * - game.js: enemies, typing, score, pause/resume, sound, and the game loop.
  *
  * Main gameplay flow:
  * 1. startGame() resets the run and starts the animation loop.
- * 2. gameLoop() spawns, moves, and draws enemies every frame.
+ * 2. gameLoop() uses elapsed time to smoothly spawn, move, and draw enemies.
  * 3. The keyboard handler matches typed letters to an enemy word.
  * 4. Completing a word awards points, plays its element sound, and removes it.
  * 5. Reaching the wizard triggers game over. Pause/resume and quit are handled
@@ -17,21 +19,27 @@
  *
  * Function guide:
  * - Enemy.constructor(): creates an enemy and chooses its word and element.
- * - Enemy.update(): moves an enemy toward the wizard and checks for collision.
+ * - Enemy.update(): smoothly moves an enemy and checks for collision.
  * - Enemy.draw(): draws the enemy, element color, and typed word progress.
  * - Enemy.checkNextChar(): checks and records the next typed letter.
  * - Enemy.isComplete(): reports whether the enemy word is finished.
- * - resizeCanvas(): makes the game world match the browser viewport.
+ * - resizeCanvas(): makes the canvas and game world match the browser viewport.
  * - startGame(): resets score and enemies, then starts a new run.
  * - initializeAudio(): unlocks the browser audio system after a button click.
+ * - startBackgroundMusic(): starts the quiet retro gameplay melody.
+ * - pauseBackgroundMusic(): ducks the melody while the game is paused.
+ * - resumeBackgroundMusic(): restores the melody after the pause countdown.
+ * - stopBackgroundMusic(): ends the melody on game over or quit.
  * - playTypingSound(): plays a mechanical keyboard click for each correct letter.
  * - playDefeatSound(): plays the sound matching fire, ice, lightning, or holy.
+ * - fireSpellBolt(): creates a visual spell shot for a correct letter.
+ * - updateAndDrawSpellEffects(): animates and renders active spell shots.
  * - pauseGame(): freezes the run and opens the pause menu.
  * - resumeGame(): counts down from three, then continues the paused run.
  * - quitToStart(): clears the run and returns to the opening screen.
  * - triggerGameOver(): saves high score data and opens the results screen.
  * - keyboard handler: pauses/resumes with Escape and types spell letters.
- * - gameLoop(): runs one frame of spawning, movement, drawing, and HUD updates.
+ * - gameLoop(): runs one time-adjusted frame of spawning, movement, drawing, and HUD updates.
  *
  * Game states: START -> PLAYING -> PAUSED/COUNTDOWN -> PLAYING or GAMEOVER.
  */
@@ -48,12 +56,16 @@ let elapsedTime = 0;
 let pauseStartedAt = 0;
 let countdownTimer = null;
 let audioContext = null;
+let musicTimer = null;
+let musicGain = null;
+let musicStep = 0;
 
 let spawnTimer = 0;
 let baseSpawnInterval = 180; // Starts at ~3 seconds
 let lastFrameTime = 0;
 let activeEnemies = [];
 let currentTarget = null;
+let spellEffects = [];
 
 const wizard = {
     x: canvas.width / 2,
@@ -184,12 +196,14 @@ document.getElementById('startHighScore').innerText = highScore;
 // Reset the run, hide the menus, and begin the animation loop.
 function startGame() {
     initializeAudio();
+    startBackgroundMusic();
     gameState = 'PLAYING';
     score = 0;
     activeEnemies = [];
     currentTarget = null;
     spawnTimer = 0;
     lastFrameTime = 0;
+    spellEffects = [];
     startTime = Date.now();
 
     document.getElementById('startScreen').classList.add('hidden');
@@ -210,8 +224,13 @@ function startGame() {
  * - Enemy appearance                 Enemy.draw()
  * - Points for typing or defeating    keyboard handler
  * - Typing key sound                 playTypingSound()
+ * - Background music                 startBackgroundMusic(), playMusicNote()
+ * - Spell shot appearance             fireSpellBolt(), updateAndDrawSpellEffects()
  * - Defeat sound style per element    playDefeatSound()
  * - Spawn rate or difficulty          gameLoop()
+ * - Full-screen game area             resizeCanvas(), index.css
+ * - Opening screen artwork            start-bg.svg, index.css
+ * - Battleground artwork              map1.svg, index.css
  * - Pause, resume, or quit behavior   pauseGame(), resumeGame(), quitToStart()
  * - End-of-game screen or high score  triggerGameOver()
  * - Menus and button text             index.html
@@ -231,6 +250,66 @@ function initializeAudio() {
 
     if (audioContext.state === 'suspended') {
         audioContext.resume();
+    }
+}
+
+// Start a quiet looping melody made from short retro synth notes.
+function startBackgroundMusic() {
+    if (!audioContext || musicTimer) return;
+
+    musicGain = audioContext.createGain();
+    musicGain.gain.setValueAtTime(0.18, audioContext.currentTime);
+    musicGain.connect(audioContext.destination);
+    musicStep = 0;
+    playMusicNote();
+    musicTimer = setInterval(playMusicNote, 260);
+}
+
+// Play the next note in the repeating minor-style melody.
+function playMusicNote() {
+    if (!audioContext || !musicGain) return;
+
+    const melody = [196, 233, 261, 311, 349, 311, 261, 233];
+    const now = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const noteGain = audioContext.createGain();
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(melody[musicStep], now);
+    noteGain.gain.setValueAtTime(0.0001, now);
+    noteGain.gain.exponentialRampToValueAtTime(0.35, now + 0.02);
+    noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    oscillator.connect(noteGain);
+    noteGain.connect(musicGain);
+    oscillator.start(now);
+    oscillator.stop(now + 0.23);
+    musicStep = (musicStep + 1) % melody.length;
+}
+
+// Lower the melody volume without stopping its sequence during a pause.
+function pauseBackgroundMusic() {
+    if (!musicGain || !audioContext) return;
+    musicGain.gain.cancelScheduledValues(audioContext.currentTime);
+    musicGain.gain.linearRampToValueAtTime(0.0001, audioContext.currentTime + 0.12);
+}
+
+// Restore the melody volume when the game resumes.
+function resumeBackgroundMusic() {
+    if (!musicGain || !audioContext) return;
+    musicGain.gain.cancelScheduledValues(audioContext.currentTime);
+    musicGain.gain.linearRampToValueAtTime(0.18, audioContext.currentTime + 0.12);
+}
+
+// Stop the melody and release its timer and audio node.
+function stopBackgroundMusic() {
+    if (musicTimer) {
+        clearInterval(musicTimer);
+        musicTimer = null;
+    }
+
+    if (musicGain) {
+        musicGain.disconnect();
+        musicGain = null;
     }
 }
 
@@ -263,6 +342,43 @@ function playTypingSound() {
     gain.connect(audioContext.destination);
     source.start(now);
     source.stop(now + duration);
+}
+
+// Create a short colored bolt from the wizard to the enemy being typed.
+function fireSpellBolt(enemy) {
+    spellEffects.push({
+        enemy,
+        startX: wizard.x,
+        startY: wizard.y,
+        progress: 0,
+        color: enemy.color
+    });
+}
+
+// Move each spell bolt toward its target and remove it after it lands.
+function updateAndDrawSpellEffects(frameDelta) {
+    spellEffects = spellEffects.filter(effect => {
+        effect.progress += frameDelta * 0.16;
+        const targetX = effect.enemy.x;
+        const targetY = effect.enemy.y;
+        const boltX = effect.startX + (targetX - effect.startX) * effect.progress;
+        const boltY = effect.startY + (targetY - effect.startY) * effect.progress;
+
+        ctx.save();
+        ctx.strokeStyle = effect.color;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = effect.color;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(effect.startX, effect.startY);
+        ctx.lineTo(boltX, boltY);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(boltX - 4, boltY - 4, 8, 8);
+        ctx.restore();
+
+        return effect.progress < 1;
+    });
 }
 
 // Play a short sound whose tone matches the defeated enemy's element.
@@ -300,6 +416,7 @@ function pauseGame() {
     if (gameState !== 'PLAYING') return;
 
     gameState = 'PAUSED';
+    pauseBackgroundMusic();
     pauseStartedAt = Date.now();
     document.getElementById('pauseButton').classList.add('hidden');
     document.getElementById('pauseScreen').classList.remove('hidden');
@@ -323,6 +440,7 @@ function resumeGame() {
             countdownTimer = null;
             startTime += Date.now() - pauseStartedAt;
             gameState = 'PLAYING';
+            resumeBackgroundMusic();
             document.getElementById('pauseScreen').classList.add('hidden');
             document.getElementById('pauseButton').classList.remove('hidden');
             requestAnimationFrame(gameLoop);
@@ -338,9 +456,11 @@ function quitToStart() {
     }
 
     gameState = 'START';
+    stopBackgroundMusic();
     activeEnemies = [];
     currentTarget = null;
     score = 0;
+    spellEffects = [];
 
     document.getElementById('pauseButton').classList.add('hidden');
     document.getElementById('pauseScreen').classList.add('hidden');
@@ -351,6 +471,7 @@ function quitToStart() {
 // Stop the run, save a new high score if needed, and show the results screen.
 function triggerGameOver() {
     gameState = 'GAMEOVER';
+    stopBackgroundMusic();
     elapsedTime = Math.floor((Date.now() - startTime) / 1000);
 
     if (score > highScore) {
@@ -381,6 +502,7 @@ window.addEventListener('keydown', (e) => {
 
     if (currentTarget) {
         if (currentTarget.checkNextChar(char)) {
+            fireSpellBolt(currentTarget);
             playTypingSound();
             score += 10; // Points per correct letter
             if (currentTarget.isComplete()) {
@@ -400,6 +522,7 @@ window.addEventListener('keydown', (e) => {
             });
             currentTarget = matchingEnemies[0];
             currentTarget.checkNextChar(char);
+            fireSpellBolt(currentTarget);
             playTypingSound();
             score += 10;
         }
@@ -432,6 +555,8 @@ function gameLoop(timestamp) {
         enemy.update(frameDelta);
         enemy.draw();
     });
+
+    updateAndDrawSpellEffects(frameDelta);
 
     // Draw Central Wizard
     ctx.beginPath();
