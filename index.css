@@ -74,5 +74,40 @@
             background: #c0392b;
             transform: scale(1.05);
         }
+        .quit-btn {
+            background: #555;
+            font-size: 15px;
+            margin-top: 8px;
+        }
+        .quit-btn:hover {
+            background: #444;
+        }
+        .pause-btn {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            background: rgba(22, 22, 34, 0.9);
+            color: #ffffff;
+            border: 1px solid #777;
+            padding: 8px 14px;
+            font-family: monospace;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .pause-btn:hover {
+            background: #3498db;
+            border-color: #ffffff;
+        }
+        .countdown {
+            color: #f1c40f;
+            font-size: 64px;
+            font-weight: bold;
+            line-height: 1;
+            margin: 20px 0 5px;
+            text-shadow: 0 0 15px rgba(241, 196, 15, 0.6);
+        }
         .hidden { display: none !important; }
     

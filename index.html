@@ -12,6 +12,16 @@
 
     <div id="game-container">
         <canvas id="gameCanvas" width="900" height="600"></canvas>
+        <button id="pauseButton" class="pause-btn hidden" onclick="pauseGame()" aria-label="Pause game">PAUSE</button>
+
+        <!-- Pause Screen -->
+        <div id="pauseScreen" class="overlay hidden">
+            <h1>GAME PAUSED</h1>
+            <p>Take a breath, wizard.</p>
+            <div id="countdownText" class="countdown">3</div>
+            <button class="btn" onclick="resumeGame()">RESUME</button>
+            <button class="btn quit-btn" onclick="quitToStart()">QUIT TO MENU</button>
+        </div>
 
         <!-- Start Screen -->
         <div id="startScreen" class="overlay">

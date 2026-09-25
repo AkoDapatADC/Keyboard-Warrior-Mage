@@ -3,11 +3,14 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // Game State Variables
-let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER'
+let gameState = 'START'; // 'START', 'PLAYING', 'PAUSED', 'COUNTDOWN', 'GAMEOVER'
 let score = 0;  
 let highScore = localStorage.getItem('wizard_highscore') || 0;
 let startTime = 0;
 let elapsedTime = 0;
+let pauseStartedAt = 0;
+let countdownTimer = null;
+let audioContext = null;
 
 let spawnTimer = 0;
 let baseSpawnInterval = 180; // Starts at ~3 seconds
@@ -125,6 +128,7 @@ class Enemy {
 document.getElementById('startHighScore').innerText = highScore;
 
 function startGame() {
+    initializeAudio();
     gameState = 'PLAYING';
     score = 0;
     activeEnemies = [];
@@ -134,8 +138,101 @@ function startGame() {
 
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('pauseButton').classList.remove('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
 
     requestAnimationFrame(gameLoop);
+}
+
+function initializeAudio() {
+    if (!audioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioContext = new AudioContextClass();
+    }
+
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+}
+
+function playDefeatSound(type) {
+    if (!audioContext) return;
+
+    const soundSettings = {
+        fire: { waveform: 'sawtooth', startFrequency: 220, endFrequency: 70, duration: 0.2 },
+        ice: { waveform: 'sine', startFrequency: 660, endFrequency: 990, duration: 0.3 },
+        lightning: { waveform: 'square', startFrequency: 1200, endFrequency: 160, duration: 0.14 },
+        holy: { waveform: 'triangle', startFrequency: 440, endFrequency: 880, duration: 0.35 }
+    }[type];
+
+    if (!soundSettings) return;
+
+    const now = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = soundSettings.waveform;
+    oscillator.frequency.setValueAtTime(soundSettings.startFrequency, now);
+    oscillator.frequency.exponentialRampToValueAtTime(soundSettings.endFrequency, now + soundSettings.duration);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + soundSettings.duration);
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + soundSettings.duration);
+}
+
+function pauseGame() {
+    if (gameState !== 'PLAYING') return;
+
+    gameState = 'PAUSED';
+    pauseStartedAt = Date.now();
+    document.getElementById('pauseButton').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.remove('hidden');
+}
+
+function resumeGame() {
+    if (gameState !== 'PAUSED') return;
+
+    gameState = 'COUNTDOWN';
+    let secondsRemaining = 3;
+    const countdownText = document.getElementById('countdownText');
+    countdownText.innerText = secondsRemaining;
+
+    countdownTimer = setInterval(() => {
+        secondsRemaining--;
+        countdownText.innerText = secondsRemaining > 0 ? secondsRemaining : 'GO!';
+
+        if (secondsRemaining <= 0) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+            startTime += Date.now() - pauseStartedAt;
+            gameState = 'PLAYING';
+            document.getElementById('pauseScreen').classList.add('hidden');
+            document.getElementById('pauseButton').classList.remove('hidden');
+            requestAnimationFrame(gameLoop);
+        }
+    }, 1000);
+}
+
+function quitToStart() {
+    if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+    }
+
+    gameState = 'START';
+    activeEnemies = [];
+    currentTarget = null;
+    score = 0;
+
+    document.getElementById('pauseButton').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.remove('hidden');
 }
 
 function triggerGameOver() {
@@ -157,6 +254,12 @@ function triggerGameOver() {
 
 // Key Input Listener
 window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (gameState === 'PLAYING') pauseGame();
+        else if (gameState === 'PAUSED') resumeGame();
+        return;
+    }
+
     if (gameState !== 'PLAYING') return;
 
     const char = e.key.toLowerCase();
@@ -167,6 +270,7 @@ window.addEventListener('keydown', (e) => {
             score += 10; // Points per correct letter
             if (currentTarget.isComplete()) {
                 score += currentTarget.word.length * 25; // Bonus points for completing a word
+                playDefeatSound(currentTarget.type);
                 activeEnemies = activeEnemies.filter(e => e !== currentTarget);
                 currentTarget = null;
             }
